@@ -57,5 +57,5 @@ main = do args <- getArgs
                1 -> case args !! 0 of
                         "-i" -> runRepl
                         "-h" -> showHelp
-                        otherwise -> evalAndPrint $ args !! 0
+                        otherwise -> runOne $ args !! 0
                otherwise -> putStrLn "Program takes only 0 or 1 argument"

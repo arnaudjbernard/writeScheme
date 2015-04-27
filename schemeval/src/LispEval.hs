@@ -3,27 +3,35 @@
 module LispEval where
 
 import LispDefinition
+import LispClosure
 
 import Control.Monad.Error (throwError, catchError)
 import Control.Monad (liftM)
 ---------------------------------------------------------------------------------------------------
 -- Eval
 
-eval :: LispVal -> ThrowsError LispVal
-eval val@(String _) = return val
-eval val@(Number _) = return val
-eval val@(Bool _) = return val
-eval val@(DottedList _ _) = return val
-eval (List [Atom "quote", val]) = return val
-eval (List [Atom "if", pred, conseq, alt]) =
-     do result <- eval pred
+eval :: Env -> LispVal -> IOThrowsError LispVal
+eval env val@(String _) = return val
+eval env val@(Number _) = return val
+eval env val@(Bool _) = return val
+eval env val@(DottedList _ _) = return val
+eval env (Atom id) = getVar env id
+eval env (List [Atom "quote", val]) = return val
+eval env (List [Atom "if", pred, conseq, alt]) =
+    do
+        result <- eval env pred
         case result of
-             Bool False -> eval alt
-             otherwise  -> eval conseq
-eval (List ((Atom "cond"):expressions)) = evalCond expressions
-eval (List ((Atom "case"):vExpr:expressions)) = eval vExpr >>= \ v -> evalCase v expressions
-eval (List (Atom func : args)) = mapM eval args >>= apply func
-eval badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
+            Bool False -> eval env alt
+            otherwise -> eval env conseq
+eval env (List [Atom "set!", Atom var, form]) =
+     eval env form >>= setVar env var
+eval env (List [Atom "define", Atom var, form]) =
+     eval env form >>= defineVar env var
+eval env (List ((Atom "cond"):expressions)) = evalCond env expressions
+eval env (List ((Atom "case"):vExpr:expressions)) = eval env vExpr >>= \ v -> evalCase env v expressions
+eval env (List (Atom func : args)) = mapM (eval env) args >>= liftThrows . apply func
+eval env badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
+
 
 ---------------------------------------------------------------------------------------------------
 -- Apply
@@ -196,32 +204,37 @@ equal [arg1, arg2] = do
       return $ Bool $ (primitiveEquals || let (Bool x) = eqvEquals in x)
 equal badArgList = throwError $ NumArgs 2 badArgList
 
-evalCond :: [LispVal] -> ThrowsError LispVal
-evalCond [] = throwError $ Default "Cond ended without value"
-evalCond [(List [Atom "else", expr])] = eval expr
-evalCond ((List [cond, expr]):xs) = case eval cond of
-    Right (Bool True) -> eval expr
-    Right (Bool False) -> evalCond xs
-    Right notBool -> throwError $ TypeMismatch "boolean" notBool
-    err -> err
-evalCond ((List x):xs) = throwError $ NumArgs 2 x
-evalCond (x:xs) = throwError $ TypeMismatch "list" x
+evalCond :: Env -> [LispVal] -> IOThrowsError LispVal
+evalCond env [] = throwError $ Default "Cond ended without value"
+evalCond env [(List [Atom "else", expr])] = eval env expr
+evalCond env ((List [cond, expr]):xs) =
+    do
+        condResult <- eval env cond
+        case condResult of
+            Bool True -> eval env expr
+            Bool False -> evalCond env xs
+            notBool -> throwError $ TypeMismatch "boolean" notBool
+evalCond env ((List x):xs) = throwError $ NumArgs 2 x
+evalCond env (x:xs) = throwError $ TypeMismatch "list" x
 
-evalCase :: LispVal -> [LispVal] -> ThrowsError LispVal
-evalCase _ [] = throwError $ Default "Case ended without value"
-evalCase _ [(List [Atom "else", expr])] = eval expr
-evalCase v ((List [List conds, expr]):xs) = case evalCaseEquals v conds of
-    Right True -> eval expr
-    Right False -> evalCase v xs
-    Left err -> Left err
-evalCase _ (x:xs) = throwError $ TypeMismatch "list" x
+evalCase :: Env -> LispVal -> [LispVal] -> IOThrowsError LispVal
+evalCase env _ [] = throwError $ Default "Case ended without value"
+evalCase env _ [(List [Atom "else", expr])] = eval env expr
+evalCase env v ((List [List conds, expr]):xs) =
+    do
+        condsResult <- evalCaseEquals env v conds
+        case condsResult of
+            True -> eval env expr
+            False -> evalCase env v xs
+evalCase env _ (x:xs) = throwError $ TypeMismatch "list" x
 
-evalCaseEquals :: LispVal -> [LispVal] -> ThrowsError Bool
-evalCaseEquals _ [] = return False
-evalCaseEquals v1 (x:xs) = case eval x of
-    Right v2 -> case eqv [v1, v2] of
-        Right (Bool True) -> return True
-        Right (Bool False) -> evalCaseEquals v1 xs
-        Left err -> Left err
-    Left err -> Left err
+evalCaseEquals :: Env -> LispVal -> [LispVal] -> IOThrowsError Bool
+evalCaseEquals env _ [] = return False
+evalCaseEquals env refVal (x:xs) =
+    do
+        caseVal <- eval env x
+        doMatch <- liftThrows $ eqv [refVal, caseVal]
+        case doMatch of
+            Bool True -> return True
+            Bool False -> evalCaseEquals env refVal xs
 
