@@ -23,7 +23,7 @@ data LispVal =
 
 
 showVal :: LispVal -> String
-showVal (Atom name) = name
+showVal (Atom name) = "Atom: " ++ name
 showVal (List contents) = "(" ++ unwordsList contents ++ ")"
 showVal (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ showVal tail ++ ")"
 showVal (Number contents) = show contents
