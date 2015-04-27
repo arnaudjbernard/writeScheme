@@ -9,6 +9,8 @@ import Data.Ratio
 import Data.Complex
 import Control.Monad.Error (throwError)
 
+import Debug.Trace
+
 ---------------------------------------------------------------------------------------------------
 -- Symbol
 
@@ -220,5 +222,5 @@ parseLisp input = parse parseExpr "lisp" input
 
 readExpr :: String -> ThrowsError LispVal
 readExpr input = case parseLisp input of
-     Left err -> throwError $ Parser err
-     Right val -> return val
+     Left err -> traceShow ("parse error", err) $ throwError $ Parser err
+     Right val -> traceShow ("parse success", val) $ return val
