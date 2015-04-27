@@ -46,9 +46,16 @@ askUserInput ms = do
 --     evaled <- return $ liftM show $ evalResult
 --     putStrLn $ extractValue $ trapError evaled
 
+showHelp :: IO ()
+showHelp = do
+    putStrLn "-i for interactive, otherwise will interpret input"
+
 main :: IO ()
 main = do args <- getArgs
           case length args of
                0 -> runRepl
-               1 -> evalAndPrint $ args !! 0
+               1 -> case args !! 0 of
+                        "-i" -> runRepl
+                        "-h" -> showHelp
+                        otherwise -> evalAndPrint $ args !! 0
                otherwise -> putStrLn "Program takes only 0 or 1 argument"
