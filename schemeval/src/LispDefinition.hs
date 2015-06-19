@@ -20,6 +20,9 @@ data LispVal =
     | Float Double
     | Ratio Rational
     | Complex (Complex Double)
+    | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
+    | Func { params :: [String], vararg :: (Maybe String),
+             body :: [LispVal], closure :: Env }
 
 
 showVal :: LispVal -> String
@@ -34,6 +37,12 @@ showVal (Character contents) = ['\'', contents, '\'']
 showVal (Float contents) = show contents
 showVal (Ratio contents) = show contents
 showVal (Complex contents) = show contents
+showVal (PrimitiveFunc _) = "<primitive>"
+showVal (Func {params = args, vararg = varargs, body = body, closure = env}) =
+   "(lambda (" ++ unwords (map show args) ++
+      (case varargs of
+         Nothing -> ""
+         Just arg -> " . " ++ arg) ++ ") ...)"
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal
