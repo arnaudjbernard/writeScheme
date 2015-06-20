@@ -2,6 +2,7 @@ module LispDefinition where
 
 import Data.Ratio
 import Data.Complex
+import Data.IORef
 
 import Text.ParserCombinators.Parsec (ParseError)
 import Control.Monad.Error (Error, noMsg, strMsg, catchError)
@@ -20,6 +21,9 @@ data LispVal =
     | Float Double
     | Ratio Rational
     | Complex (Complex Double)
+    | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
+    | Func { params :: [String], vararg :: (Maybe String),
+             body :: [LispVal], closure :: Env }
 
 
 showVal :: LispVal -> String
@@ -27,13 +31,19 @@ showVal (Atom name) = "Atom: " ++ name
 showVal (List contents) = "(" ++ unwordsList contents ++ ")"
 showVal (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ showVal tail ++ ")"
 showVal (Number contents) = show contents
-showVal (String contents) = "\"" ++ contents ++ "\""
+showVal (String contents) = "\"LString " ++ contents ++ "\""
 showVal (Bool True) = "#t"
 showVal (Bool False) = "#f"
 showVal (Character contents) = ['\'', contents, '\'']
 showVal (Float contents) = show contents
 showVal (Ratio contents) = show contents
 showVal (Complex contents) = show contents
+showVal (PrimitiveFunc _) = "<primitive>"
+showVal (Func {params = args, vararg = varargs, body = body, closure = env}) =
+   "(lambda (" ++ unwords (map show args) ++
+      (case varargs of
+         Nothing -> ""
+         Just arg -> " . " ++ arg) ++ ") ...)"
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal
@@ -50,11 +60,11 @@ data LispError =
     | Parser ParseError
     | BadSpecialForm String LispVal
     | NotFunction String String
-    | UnboundVar String String
+    | UnboundVar String String [String]
     | Default String
 
 showError :: LispError -> String
-showError (UnboundVar message varname)  = message ++ ": " ++ varname
+showError (UnboundVar message varname boundVars)  = message ++ ": " ++ varname ++ " bound vars: " ++ show boundVars
 showError (BadSpecialForm message form) = message ++ ": " ++ show form
 showError (NotFunction message func)    = message ++ ": " ++ show func
 showError (NumArgs expected found)      = "Expected " ++ show expected
@@ -76,3 +86,16 @@ trapError action = catchError action (return . show)
 
 extractValue :: ThrowsError a -> a
 extractValue (Right val) = val
+
+---------------------------------------------------------------------------------------------------
+-- Env
+
+type Env = IORef [(String, IORef LispVal)]
+
+--showEnv :: Env -> IO String
+showEnv env = do
+    e <- readIORef env
+    return e
+
+nullEnv :: IO Env
+nullEnv = newIORef []

@@ -1,7 +1,8 @@
 module LispRepl where
 
-import LispDefinition
 import LispClosure
+import LispDefinition
+import LispEval
 
 import System.IO
 import Control.Monad (liftM)
@@ -27,8 +28,8 @@ until_ pred prompt action = do
         then return ()
         else action result >> until_ pred prompt action
 
-runRepl :: IO ()
-runRepl = nullEnv >>= until_ (== "quit") (readPrompt "Lisp>>> ") . evalAndPrint
-
 runOne :: String -> IO ()
-runOne expr = nullEnv >>= flip evalAndPrint expr
+runOne expr = primitiveBindings >>= flip evalAndPrint expr
+
+runRepl :: IO ()
+runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "Lisp>>> ") . evalAndPrint

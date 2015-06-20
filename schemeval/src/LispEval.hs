@@ -5,8 +5,46 @@ module LispEval where
 import LispDefinition
 import LispClosure
 
-import Control.Monad.Error (throwError, catchError)
+import Control.Monad.Error (throwError, catchError, runErrorT, mapErrorT)
 import Control.Monad (liftM)
+import Control.Monad.Trans (liftIO)
+
+import Data.IORef
+
+
+---------------------------------------------------------------------------------------------------
+-- Functions
+
+atomValue :: LispVal -> ThrowsError String
+atomValue (Atom val) = return val
+atomValue lispVal = throwError $ BadSpecialForm "Function takes atoms as param name" lispVal
+
+atomsValues :: [LispVal] -> ThrowsError [String]
+atomsValues [] = return []
+atomsValues (x:xs) = case atomsValues xs of
+    err@(Left l) -> err
+    Right rs -> case atomValue x of
+        Left l -> throwError $ l
+        Right r -> return $ r : rs
+
+--atomsValues :: [LispVal] -> IOThrowsError [String]
+--atomsValues lispVals =
+--    do
+--        vals <- map atomValue lispVals
+--        return vals
+
+--makeFunc :: (Maybe String) -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
+--makeFunc varargs env params body = return $ Func (map showVal params) varargs body env
+
+makeFunc :: (Maybe String) -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
+makeFunc varargs env params body =
+    case atomsValues params of
+        Left l -> throwError l
+        Right paramNames -> return $ Func paramNames varargs body env
+
+makeNormalFunc = makeFunc Nothing
+makeVarArgs = makeFunc . Just . showVal
+
 ---------------------------------------------------------------------------------------------------
 -- Eval
 
@@ -29,17 +67,39 @@ eval env (List [Atom "define", Atom var, form]) =
      eval env form >>= defineVar env var
 eval env (List ((Atom "cond"):expressions)) = evalCond env expressions
 eval env (List ((Atom "case"):vExpr:expressions)) = eval env vExpr >>= \ v -> evalCase env v expressions
-eval env (List (Atom func : args)) = mapM (eval env) args >>= liftThrows . apply func
+eval env (List (Atom "define" : List (Atom var : params) : body)) =
+     makeNormalFunc env params body >>= defineVar env var
+eval env (List (Atom "define" : DottedList (Atom var : params) varargs : body)) =
+     makeVarArgs varargs env params body >>= defineVar env var
+eval env (List (Atom "lambda" : List params : body)) =
+     makeNormalFunc env params body
+eval env (List (Atom "lambda" : DottedList params varargs : body)) =
+     makeVarArgs varargs env params body
+eval env (List (Atom "lambda" : varargs@(Atom _) : body)) =
+     makeVarArgs varargs env [] body
+eval env (List (function : args)) = do
+     func <- eval env function
+     argVals <- mapM (eval env) args
+     apply func argVals
 eval env badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
+
 
 
 ---------------------------------------------------------------------------------------------------
 -- Apply
 
-apply :: String -> [LispVal] -> ThrowsError LispVal
-apply func args = maybe (throwError $ NotFunction "Unrecognized primitive function args" func)
-                        ($ args)
-                        (lookup func primitives)
+apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
+apply (PrimitiveFunc func) args = liftThrows $ func args
+apply (Func params varargs body closure) args =
+      if num params /= num args && varargs == Nothing
+         then throwError $ NumArgs (num params) args
+         else (liftIO $ bindVars closure $ zip params args) >>= bindVarArgs varargs >>= evalBody
+      where remainingArgs = drop (length params) args
+            num = toInteger . length
+            evalBody env = liftM last $ mapM (eval env) body
+            bindVarArgs arg env = case arg of
+                Just argName -> liftIO $ bindVars env [(argName, List $ remainingArgs)]
+                Nothing -> return env
 
 ---------------------------------------------------------------------------------------------------
 -- Primitives
@@ -85,6 +145,10 @@ primitives = [
         ("eqv?", eqv),
         ("equal?", equal)
     ]
+
+primitiveBindings :: IO Env
+primitiveBindings = nullEnv >>= (flip bindVars $ map makePrimitiveFunc primitives)
+     where makePrimitiveFunc (var, func) = (var, PrimitiveFunc func)
 
 ---------------------------------------------------------------------------------------------------
 -- Unpack

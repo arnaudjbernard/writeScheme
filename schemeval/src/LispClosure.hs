@@ -4,11 +4,7 @@ import Data.IORef
 
 import LispDefinition
 import Control.Monad.Error
-
-type Env = IORef [(String, IORef LispVal)]
-
-nullEnv :: IO Env
-nullEnv = newIORef []
+import Control.Monad.Trans (liftIO)
 
 type IOThrowsError = ErrorT LispError IO
 
@@ -24,13 +20,13 @@ isBound envRef var = readIORef envRef >>= return . maybe False (const True) . lo
 
 getVar :: Env -> String -> IOThrowsError LispVal
 getVar envRef var  =  do env <- liftIO $ readIORef envRef
-                         maybe (throwError $ UnboundVar "Getting an unbound variable" var)
+                         maybe (throwError $ UnboundVar "Getting an unbound variable" var (map fst env))
                                (liftIO . readIORef)
                                (lookup var env)
 
 setVar :: Env -> String -> LispVal -> IOThrowsError LispVal
 setVar envRef var value = do env <- liftIO $ readIORef envRef
-                             maybe (throwError $ UnboundVar "Setting an unbound variable" var)
+                             maybe (throwError $ UnboundVar "Setting an unbound variable" var (map fst env))
                                    (liftIO . (flip writeIORef value))
                                    (lookup var env)
                              return value
