@@ -19,26 +19,9 @@ atomValue :: LispVal -> ThrowsError String
 atomValue (Atom val) = return val
 atomValue lispVal = throwError $ BadSpecialForm "Function takes atoms as param name" lispVal
 
-atomsValues :: [LispVal] -> ThrowsError [String]
-atomsValues [] = return []
-atomsValues (x:xs) = case atomsValues xs of
-    err@(Left l) -> err
-    Right rs -> case atomValue x of
-        Left l -> throwError $ l
-        Right r -> return $ r : rs
-
---atomsValues :: [LispVal] -> IOThrowsError [String]
---atomsValues lispVals =
---    do
---        vals <- map atomValue lispVals
---        return vals
-
---makeFunc :: (Maybe String) -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
---makeFunc varargs env params body = return $ Func (map showVal params) varargs body env
-
 makeFunc :: (Maybe String) -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
 makeFunc varargs env params body =
-    case atomsValues params of
+    case mapM atomValue params of
         Left l -> throwError l
         Right paramNames -> return $ Func paramNames varargs body env
 
