@@ -5,7 +5,8 @@ import Data.Complex
 import Data.IORef
 
 import Text.ParserCombinators.Parsec (ParseError)
-import Control.Monad.Error (Error, noMsg, strMsg, catchError)
+import Control.Monad.Error (Error, ErrorT, noMsg, strMsg, catchError)
+import System.IO (Handle)
 
 ---------------------------------------------------------------------------------------------------
 -- Lisp definition
@@ -24,7 +25,8 @@ data LispVal =
     | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
     | Func { params :: [String], vararg :: (Maybe String),
              body :: [LispVal], closure :: Env }
-
+    | IOFunc ([LispVal] -> IOThrowsError LispVal)
+    | Port Handle
 
 showVal :: LispVal -> String
 showVal (Atom name) = "Atom: " ++ name
@@ -44,6 +46,8 @@ showVal (Func {params = args, vararg = varargs, body = body, closure = env}) =
       (case varargs of
          Nothing -> ""
          Just arg -> " . " ++ arg) ++ ") ...)"
+showVal (IOFunc _) = "<IO primitive>"
+showVal (Port _)   = "<IO port>"
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal
@@ -53,6 +57,8 @@ instance Show LispVal where
 
 ---------------------------------------------------------------------------------------------------
 -- Errors
+
+type IOThrowsError = ErrorT LispError IO
 
 data LispError =
       NumArgs Integer [LispVal]

@@ -6,8 +6,6 @@ import LispDefinition
 import Control.Monad.Error
 import Control.Monad.Trans (liftIO)
 
-type IOThrowsError = ErrorT LispError IO
-
 liftThrows :: ThrowsError a -> IOThrowsError a
 liftThrows (Left err) = throwError err
 liftThrows (Right val) = return val

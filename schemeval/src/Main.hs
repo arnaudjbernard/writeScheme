@@ -48,14 +48,13 @@ askUserInput ms = do
 
 showHelp :: IO ()
 showHelp = do
-    putStrLn "-i for interactive, otherwise will interpret input"
+    putStrLn "-i for interactive, -e expr for eval, filename for loading and running a file"
 
 main :: IO ()
 main = do args <- getArgs
-          case length args of
-               0 -> runRepl
-               1 -> case args !! 0 of
-                        "-i" -> runRepl
-                        "-h" -> showHelp
-                        otherwise -> runOne $ args !! 0
-               otherwise -> putStrLn "Program takes only 0 or 1 argument"
+          case args of
+               [] -> runRepl
+               ["-i"] -> runRepl
+               ["-h"] -> showHelp
+               ("-e":expr:[]) -> runOne expr
+               otherwise -> runFile args

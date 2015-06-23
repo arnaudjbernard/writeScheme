@@ -1,6 +1,7 @@
 module LispParsing where
 
 import LispDefinition
+import LispClosure
 
 import Control.Monad (liftM)
 import Text.ParserCombinators.Parsec hiding (spaces)
@@ -220,7 +221,18 @@ parseExpr = parseAtom
 parseLisp :: String -> Either ParseError LispVal
 parseLisp input = parse parseExpr "lisp" input
 
+--readExpr :: String -> ThrowsError LispVal
+--readExpr input = case parseLisp input of
+--     Left err -> traceShow ("parse error", err) $ throwError $ Parser err
+--     Right val -> traceShow ("parse success", val) $ return val
+
+readOrThrow :: Parser a -> String -> ThrowsError a
+readOrThrow parser input = case parse parser "lisp" input of
+    Left err  -> throwError $ Parser err
+    Right val -> return val
+
 readExpr :: String -> ThrowsError LispVal
-readExpr input = case parseLisp input of
-     Left err -> traceShow ("parse error", err) $ throwError $ Parser err
-     Right val -> traceShow ("parse success", val) $ return val
+readExpr = readOrThrow parseExpr
+
+readExprList :: String -> ThrowsError [LispVal]
+readExprList = readOrThrow (endBy parseExpr spaces)
